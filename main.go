@@ -68,24 +68,33 @@ func main() {
 
 	var comicID int
 
-	var flagMode byte
+	var flagMode string
 	var query string
-	if *flagComicID != 0 {
-		comicID = *flagComicID
-	}else if len(flag.Args()) == 0 {
-		// comicID = 38342
-		
+
+	// 不带参数直接点击
+	if len(flag.Args()) == 0 {
 		fmt.Println("搜索标题or查找漫画ID?(a/b)")
-		fmt.Scanf("%c\n", &flagMode)
-		if flagMode == 'a' {
-			fmt.Scanf("%s", &query)
-		} else {
-			fmt.Scanf("%d", comicID)
+		var temp byte
+		fmt.Scanf("%c\n", &temp)
+		switch temp {
+		case 'a':
+			flagMode = "search"
+			fmt.Scanf("%s\n", &query)
+		case 'b':
+			flagMode = "id"
+			fmt.Scanf("%d\n", comicID)
 		}
-		
+	} else {
+		if *flagComicID != 0 {
+			comicID = *flagComicID
+			flagMode = "id"
+		} else if *flagSearch {
+			flagMode = "search"
+			query = strings.Join(flag.Args(), "%20")
+		}
 	}
-	if *flagSearch || flagMode == 'a' {
-		query = strings.Join(flag.Args(), " ")
+
+	if flagMode == "search" {
 		searchJSON, err := getSearchJSON(query)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "搜索失败. %v", err)
@@ -93,15 +102,95 @@ func main() {
 			exec.Command("pause")
 		}
 		cacheJSON(searchJSON, "cache/search", query+".json", *flagCache)
-		var chooseNum int
+
+		for i := 0; i < 15 && i < len(searchJSON); i++ {
+			searchSingleJSON := searchJSON[i]
+			fmt.Printf("%d,%d,%s,%s\n", i, searchSingleJSON.ID, searchSingleJSON.ComicName, searchSingleJSON.ComicURL)
+		}
+
+		// 如果是直接点击打开
+		if len(flag.Args()) == 0 {
+			var chooseNum int
+			fmt.Scanf("%d\n", &chooseNum)
+			comicID = searchJSON[chooseNum].ID
+			fmt.Println("[ID]", comicID)
+			fmt.Println("[chooseNum]", chooseNum)
+			flagMode = "id"
+		}
+	}
+
+	if flagMode == "id" {
+		var comicJSON *ComicJSON
+		comicJSON, err := getComicJSON(comicID)
+		if err != nil {
+			os.Exit(1)
+		}
+		cacheJSON(comicJSON, fmt.Sprintf("cache/comic/%d", comicID), fmt.Sprintf("%d.json", comicID), *flagCache)
+		volumes := parseChaptersJSON(comicJSON)
+		for volumeName, volumeDetail := range volumes {
+			fmt.Println(volumeName)
+			for i, chapterDict := range volumeDetail {
+				chapterID := chapterDict.ChapterID
+				chapterTitle := chapterDict.ChapterTitle
+
+				var chapter *Chapter
+				chapter, err := getChapterJSON(comicID, chapterID)
+				if err != nil {
+					os.Exit(1)
+				}
+				cacheJSON(chapter, fmt.Sprintf("cache/comic/%d/chapters", comicID), fmt.Sprintf("%d.json", comicID), *flagCache)
+				picNum := chapter.PicNum
+				fmt.Printf("第%d章,%s,%d图片数:%d\n", i+1, chapterTitle, chapterID, picNum)
+				ok := saveChapterPages(chapter, comicJSON.ComicName, volumeName)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "章节图片下载失败.")
+					os.Exit(1)
+				}
+			}
+		}
+
+	}
+
+	/*
+	if *flagComicID != 0 {
+		comicID = *flagComicID
+	} else if len(flag.Args()) == 0 {
+		// comicID = 38342
+
+		fmt.Println("搜索标题or查找漫画ID?(a/b)")
+		fmt.Scanf("%c\n", &flagMode)
+	}
+	if *flagSearch {
+		query = strings.Join(flag.Args(), "%20")
+		fmt.Println("[query]", query)
+		searchJSON, err := getSearchJSON(query)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "搜索失败. %v", err)
+			os.Exit(1)
+			exec.Command("pause")
+		}
+		cacheJSON(searchJSON, "cache/search", query+".json", *flagCache)
+
 		for i := 0; i < 15 && i < len(searchJSON); i++ {
 			searchSingleJSON := searchJSON[i]
 			fmt.Printf("%-3d %d\t%s\t%s\n", i, searchSingleJSON.ID, searchSingleJSON.ComicName, searchSingleJSON.ComicURL)
 		}
-		fmt.Scanf("%d", &chooseNum)
-		comicID = searchJSON[chooseNum].ID
-	}
 
+		if flagMode == 'a' {
+			var chooseNum int
+			fmt.Scanf("%d", &chooseNum)
+			comicID = searchJSON[chooseNum].ID
+		} else {
+			return
+		}
+	} else if flagMode == 'a' {
+		if flagMode == 'a' {
+			fmt.Scanf("%s", &query)
+		} else {
+			fmt.Scanf("%d", comicID)
+		}
+
+	}
 
 	var comicJSON *ComicJSON
 	comicJSON, err := getComicJSON(comicID)
@@ -131,4 +220,5 @@ func main() {
 			}
 		}
 	}
+	*/
 }

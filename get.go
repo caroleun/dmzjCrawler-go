@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -36,6 +37,12 @@ func getSearchJSONStr(query string) (JSONStr string, err error) {
 	var searchJSONStr string
 
 	if searchBytes, err := getBytes(searchURL, nil); err == nil {
+		if len(reg.FindStringSubmatch(string(searchBytes))) == 0 {
+			fmt.Fprintf(os.Stderr, "search 匹配不到json.\n")
+			fmt.Fprintln(os.Stderr, searchURL)
+			fmt.Fprintln(os.Stderr, string(searchBytes))
+			return "", errors.New("search unexpected json")
+		}
 		searchJSONStr = reg.FindStringSubmatch(string(searchBytes))[1]
 	} else {
 		fmt.Fprintf(os.Stderr, "get search json fail. %v", err)
